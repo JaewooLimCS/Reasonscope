@@ -1,65 +1,139 @@
-import Image from "next/image";
+'use client';
+
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Separator } from '@/components/ui/separator';
+import { MethodCard } from '@/components/MethodCard';
+import { DOMAINS } from '@/lib/domains';
+import type { Method, MethodResult } from '@/types/reasoning';
 
 export default function Home() {
+  const [question, setQuestion] = useState('');
+  const [submittedQuestion, setSubmittedQuestion] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<MethodResult[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleRun() {
+    setLoading(true);
+    setError(null);
+    setResults(null);
+    const q = question;
+    setSubmittedQuestion(q);
+    try {
+      const res = await fetch('/api/reason', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error ?? `HTTP ${res.status}`);
+      } else {
+        setResults(json.results as MethodResult[]);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRetry(method: Method) {
+    const previousAttempts = results?.find((r) => r.method === method)?.attempts ?? [];
+    const res = await fetch('/api/reason/retry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question: submittedQuestion,
+        method,
+        previousAttempts,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      setError(json.error ?? `HTTP ${res.status}`);
+      return;
+    }
+    const newResult = json.result as MethodResult;
+    setResults((prev) =>
+      prev ? prev.map((r) => (r.method === method ? newResult : r)) : prev,
+    );
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="max-w-7xl mx-auto p-8 flex flex-col gap-6">
+      <header>
+        <h1 className="text-3xl font-semibold tracking-tight">ReasonScope</h1>
+        <p className="text-muted-foreground mt-1">
+          Multi-method reasoning observability with NVIDIA Nemotron
+        </p>
+      </header>
+
+      <Separator />
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-sm font-medium">Try a domain:</span>
+          {DOMAINS.map((d) => (
+            <Button
+              key={d.id}
+              variant="outline"
+              size="sm"
+              onClick={() => setQuestion(d.question)}
+              disabled={loading}
+            >
+              <span className="mr-1">{d.emoji}</span>
+              {d.label}
+            </Button>
+          ))}
+        </div>
+
+        <Textarea
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          placeholder="Ask a question, or pick a domain above..."
+          rows={6}
+          className="font-mono text-sm"
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+
+        <div className="flex justify-end">
+          <Button
+            onClick={handleRun}
+            disabled={loading || question.trim().length === 0}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+            {loading ? 'Reasoning...' : 'Run'}
+          </Button>
+        </div>
+      </section>
+
+      {error && (
+        <p className="text-destructive text-sm border border-destructive/30 rounded p-3">
+          {error}
+        </p>
+      )}
+
+      {loading && (
+        <section className="flex flex-col gap-6 max-w-5xl mx-auto w-full">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-[250px] w-full rounded-xl" />
+          ))}
+        </section>
+      )}
+
+      {results && (
+        <section className="flex flex-col gap-6 max-w-5xl mx-auto w-full">
+          {results.map((r) => (
+            <MethodCard
+              key={r.method}
+              result={r}
+              onRetry={() => handleRetry(r.method)}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+          ))}
+        </section>
+      )}
     </div>
   );
 }
