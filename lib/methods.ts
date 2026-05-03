@@ -20,6 +20,37 @@ export const METHODS: MethodMeta[] = [
   { id: 'pas', name: 'Plan-and-Solve', citation: PAS_CITATION },
 ];
 
+const COT_TRIGGER = "Let's think step by step.";
+const PAS_TRIGGER =
+  "Let's first understand the problem and devise a plan to solve the problem. Then, let's carry out the plan and solve the problem step by step.";
+
+export function methodTrigger(method: Method): string {
+  switch (method) {
+    case 'direct':
+      return '';
+    case 'cot':
+      return COT_TRIGGER;
+    case 'pas':
+      return PAS_TRIGGER;
+  }
+}
+
+export function methodCitation(method: Method): string | null {
+  switch (method) {
+    case 'direct':
+      return null;
+    case 'cot':
+      return COT_CITATION;
+    case 'pas':
+      return PAS_CITATION;
+  }
+}
+
+export function buildMethodPrompt(method: Method, question: string): string {
+  const trigger = methodTrigger(method);
+  return trigger ? `${question}\n\n${trigger}` : question;
+}
+
 function buildAttempt({
   previousAttempts,
   validatorVerdict,
@@ -50,7 +81,7 @@ function buildAttempt({
   };
 }
 
-async function runMethod(
+export async function runMethod(
   method: Method,
   question: string,
   prompt: string,
@@ -189,27 +220,41 @@ async function runMethod(
   }
 }
 
+async function runMethodAsManual(
+  method: Method,
+  question: string,
+  previousAttempts: AttemptRecord[] = [],
+): Promise<MethodResult> {
+  const prompt = buildMethodPrompt(method, question);
+  const result = await runMethod(
+    method,
+    question,
+    prompt,
+    methodCitation(method),
+    previousAttempts,
+  );
+  return { ...result, mode: 'manual' };
+}
+
 export function runDirect(
   question: string,
   previousAttempts: AttemptRecord[] = [],
 ): Promise<MethodResult> {
-  return runMethod('direct', question, question, null, previousAttempts);
+  return runMethodAsManual('direct', question, previousAttempts);
 }
 
 export function runCoT(
   question: string,
   previousAttempts: AttemptRecord[] = [],
 ): Promise<MethodResult> {
-  const prompt = `${question}\n\nLet's think step by step.`;
-  return runMethod('cot', question, prompt, COT_CITATION, previousAttempts);
+  return runMethodAsManual('cot', question, previousAttempts);
 }
 
 export function runPaS(
   question: string,
   previousAttempts: AttemptRecord[] = [],
 ): Promise<MethodResult> {
-  const prompt = `${question}\n\nLet's first understand the problem and devise a plan to solve the problem. Then, let's carry out the plan and solve the problem step by step.`;
-  return runMethod('pas', question, prompt, PAS_CITATION, previousAttempts);
+  return runMethodAsManual('pas', question, previousAttempts);
 }
 
 export function runMethodById(
@@ -217,12 +262,5 @@ export function runMethodById(
   question: string,
   previousAttempts: AttemptRecord[] = [],
 ): Promise<MethodResult> {
-  switch (method) {
-    case 'direct':
-      return runDirect(question, previousAttempts);
-    case 'cot':
-      return runCoT(question, previousAttempts);
-    case 'pas':
-      return runPaS(question, previousAttempts);
-  }
+  return runMethodAsManual(method, question, previousAttempts);
 }

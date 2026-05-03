@@ -12,6 +12,7 @@ import type { Method, MethodResult } from '@/types/reasoning';
 export default function Home() {
   const [question, setQuestion] = useState('');
   const [submittedQuestion, setSubmittedQuestion] = useState('');
+  const [autoCorrect, setAutoCorrect] = useState(true);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<MethodResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +27,7 @@ export default function Home() {
       const res = await fetch('/api/reason', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: q }),
+        body: JSON.stringify({ question: q, autoCorrect }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -42,7 +43,9 @@ export default function Home() {
   }
 
   async function handleRetry(method: Method) {
-    const previousAttempts = results?.find((r) => r.method === method)?.attempts ?? [];
+    const previousResult = results?.find((r) => r.method === method);
+    const previousAttempts = previousResult?.attempts ?? [];
+    const mode = previousResult?.mode ?? 'manual';
     const res = await fetch('/api/reason/retry', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -50,6 +53,8 @@ export default function Home() {
         question: submittedQuestion,
         method,
         previousAttempts,
+        mode,
+        previousResult: mode === 'agentic' ? previousResult : undefined,
       }),
     });
     const json = await res.json();
@@ -99,7 +104,17 @@ export default function Home() {
           className="font-mono text-sm"
         />
 
-        <div className="flex justify-end">
+        <div className="flex justify-between items-center">
+          <label className="flex items-center gap-2 text-sm select-none">
+            <input
+              type="checkbox"
+              checked={autoCorrect}
+              onChange={(e) => setAutoCorrect(e.target.checked)}
+              disabled={loading}
+              className="size-4"
+            />
+            <span>Auto-correct (agentic loop, max 3 iterations)</span>
+          </label>
           <Button
             onClick={handleRun}
             disabled={loading || question.trim().length === 0}

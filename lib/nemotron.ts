@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { encode } from 'gpt-tokenizer';
 
 const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
-const MODEL_ID = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
+const MODEL_ID = 'nvidia/nemotron-3-super-120b-a12b';
 
 const apiKey = process.env.NVIDIA_API_KEY;
 if (!apiKey) {
@@ -35,15 +35,20 @@ export interface NemotronCallResult {
 export async function callNemotron(userPrompt: string): Promise<NemotronCallResult> {
   const start = performance.now();
 
+  // Per NVIDIA's official "View Code" snippet for Nemotron 3 Super 120B-A12B:
+  // temperature=1.0, top_p=0.95, max_tokens=16384, plus extra_body with
+  // chat_template_kwargs.enable_thinking and a top-level reasoning_budget.
   const completion = await client.chat.completions.create({
     model: MODEL_ID,
     messages: [{ role: 'user', content: userPrompt }],
-    // NVIDIA's model card recommends temperature=1.0 and top_p=1.0 for reasoning tasks on this model (the 0.6/0.95 setting is for tool calling).
     temperature: 1.0,
-    top_p: 1.0,
-    // Increased to accommodate long reasoning traces + answers (esp. for CoT on planning-domain prompts)
-    max_tokens: 8192,
-  });
+    top_p: 0.95,
+    max_tokens: 16384,
+    extra_body: {
+      chat_template_kwargs: { enable_thinking: true },
+      reasoning_budget: 16384,
+    },
+  } as any);
 
   const latencyMs = performance.now() - start;
 

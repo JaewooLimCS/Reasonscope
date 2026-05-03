@@ -85,9 +85,11 @@ function formatTime(ts: number): string {
 function AttemptRow({
   attempt,
   isCurrent,
+  mode,
 }: {
   attempt: AttemptRecord;
   isCurrent: boolean;
+  mode: 'agentic' | 'manual';
 }) {
   const totalSeconds = ((attempt.latencyMs + (attempt.judgeLatencyMs ?? 0)) / 1000).toFixed(0);
   const colorClass =
@@ -97,10 +99,11 @@ function AttemptRow({
         ? 'text-destructive'
         : 'text-amber-700';
   const icon = attempt.outcome === 'pass' ? '✅' : '❌';
+  const label = mode === 'agentic' ? 'Iteration' : 'Attempt';
 
   return (
     <div className="text-xs flex flex-wrap gap-x-2">
-      <span className="font-medium">Attempt {attempt.attemptNumber}</span>
+      <span className="font-medium">{label} {attempt.attemptNumber}</span>
       <span className="text-muted-foreground">· {formatTime(attempt.timestamp)}</span>
       <span className={colorClass}>
         · {icon} {attempt.outcomeDetail}
@@ -121,6 +124,12 @@ export function MethodCard({ result, onRetry }: MethodCardProps) {
   const attempts = Array.isArray(result.attempts) ? result.attempts : [];
   // Guard: never let arithmetic produce a negative or stale count.
   const retryCount = Math.max(0, attempts.length - 1);
+  const mode: 'agentic' | 'manual' = result.mode ?? 'manual';
+  const AGENTIC_MAX_ITERATIONS = 3;
+  const hitMaxIterations =
+    mode === 'agentic' &&
+    Boolean(result.error) &&
+    attempts.length >= AGENTIC_MAX_ITERATIONS;
 
   async function handleRetry() {
     if (!onRetry) return;
@@ -140,7 +149,7 @@ export function MethodCard({ result, onRetry }: MethodCardProps) {
           <div className="flex items-center gap-2">
             {retryCount > 0 ? (
               <Badge variant="outline" className="text-xs">
-                🔄 Retried {retryCount}×
+                🔄 {mode === 'agentic' ? 'Iterated' : 'Retried'} {retryCount}×
               </Badge>
             ) : null}
             <StatusBadge result={result} />
@@ -151,7 +160,14 @@ export function MethodCard({ result, onRetry }: MethodCardProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-1 min-w-0">
-        {result.error ? (
+        {hitMaxIterations && (
+          <div className="rounded border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900">
+            Max iterations reached ({AGENTIC_MAX_ITERATIONS}) — last attempt scored{' '}
+            {llm?.score ?? '?'}/5. Showing the final attempt's answer below.
+          </div>
+        )}
+
+        {result.error && !hitMaxIterations ? (
           <>
             <p className="text-sm text-destructive">Error: {result.error}</p>
             {judgeFailed && llm && (
@@ -208,6 +224,39 @@ export function MethodCard({ result, onRetry }: MethodCardProps) {
               )}
             </div>
 
+            {hitMaxIterations && judgeFailed && llm && (
+              <div className="flex flex-col gap-1 rounded border p-2 bg-amber-50">
+                <div className="text-xs font-medium">Last judge breakdown · Score: {llm.score}/5</div>
+                <CriterionRow
+                  label="Completeness"
+                  status={llm.completeness}
+                  reason={llm.completenessReason}
+                />
+                <CriterionRow
+                  label="Coherence"
+                  status={llm.coherence}
+                  reason={llm.coherenceReason}
+                />
+                <CriterionRow
+                  label="Constraints"
+                  status={llm.constraints}
+                  reason={llm.constraintsReason}
+                />
+              </div>
+            )}
+
+            {hitMaxIterations && canRetry && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleRetry}
+                disabled={retrying}
+                className="self-start"
+              >
+                {retrying ? 'Retrying...' : '🔄 Run one more correction'}
+              </Button>
+            )}
+
             <Accordion>
               <AccordionItem value="trace" className="border-b-0">
                 <AccordionTrigger className="text-sm py-2">
@@ -244,6 +293,7 @@ export function MethodCard({ result, onRetry }: MethodCardProps) {
                       key={a.attemptNumber}
                       attempt={a}
                       isCurrent={a.attemptNumber === attempts.length}
+                      mode={mode}
                     />
                   ))}
                 </div>

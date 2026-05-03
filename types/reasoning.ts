@@ -39,4 +39,7 @@ export interface MethodResult {
   judgeVerdict?: JudgeVerdict;
   llmJudgeVerdict?: LLMJudgeVerdict;
   attempts?: AttemptRecord[];
+  // 'agentic' = self-correction loop run (Iteration N labels);
+  // 'manual'  = single-shot + user-driven retries (Attempt N labels).
+  mode?: 'agentic' | 'manual';
 }
