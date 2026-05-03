@@ -21,27 +21,11 @@ When validation fails, the agent automatically injects the judge's specific feed
 
 ## The ReAct loop
 Question
-│
-▼
-┌─────────────────────────────┐
-│ Reason  (Nemotron generates) │  ◄────────┐
-└─────────────────────────────┘            │
-│                                       │
-▼                                       │
-┌─────────────────────────────┐            │
-│ Observe                     │            │
-│  • Stage 1 validator        │            │
-│  • Stage 2 LLM judge        │            │
-└─────────────────────────────┘            │
-│                                       │
-├── PASS ─► Return answer               │
-│                                       │
-└── FAIL ─► Act                         │
-(inject failure reason       │
-into corrective prompt) ────┘
-(max 3 iterations)
-
-Each iteration preserves the original method's reasoning trigger — a Plan-and-Solve correction stays Plan-and-Solve, with the judge's feedback wrapped around the original task.
+   →  Reason (Nemotron generates)
+   →  Observe (Stage 1 validator + Stage 2 LLM judge)
+   →  PASS → Return answer
+   →  FAIL → Act (inject failure reason into corrective prompt)
+   →  Loop (max 3 iterations)
 
 ---
 
